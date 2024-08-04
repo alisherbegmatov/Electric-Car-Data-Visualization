@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>Electric Car Data Visualization</title>
+    <link rel="shortcut icon" href="./favicon.ico" type="image/x-icon" />
+    <meta content="width=device-width, initial-scale=1" name="viewport" />
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+    <h1>Electric Car Data Visualization</h1>
+
+    <div id=graph></div>
+    <div id="buttons">
+        <button id="Price">Price</button>
+        <button id="TopSpeed">Top Speed</button>
+        <button id="Acceleration">Acceleration</button>
+        <button id="Range">Range</button>
+    </div>
+
+    <script>
+        async function handleData(property) {
+
+            // Load the data
+            let data = await d3.csv("electric-cars.csv");
+
+            data.sort((a, b) => b[property] - a[property]);
+
+            d3.select("#graph")
+                .selectAll("*").remove();
+
+            // Declare the dimensions of the graph
+            const width = window.innerWidth > 960 ? 60 : 50
+            const height = window.innerWidth > 960 ? 60 : 50
+            const chartRadius = height / 2 - 10;
+            const PI = Math.PI,
+                arcMinRadius = 2,
+                arcPadding = 3,
+                numArcs = 4
+            arcWidth = (chartRadius - arcMinRadius - (numArcs - 1) * arcPadding) / numArcs;
+
+            // Create Scale for Top Speed
+            const topspeedScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.TopSpeed) * 1.1])
+                .range([0, 2 * PI]);
+
+            // Create Scale for Acceleration
+            const accelerationScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.Acceleration) * 1.1])
+                .range([0, 2 * PI]);
+
+            // Create Scale for Price
+            const priceScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.Price) * 2.5])
+                .range([0, 2 * PI]);
+
+            // Create Scale for Range
+            const rangeScale = d3.scaleLinear()
+                .domain([0, d3.max(data, d => d.Range) * 1.1])
+                .range([0, 2 * PI]);
+
+
+            let arcGen = d3.arc()
+                .innerRadius((d, i) => getInnerRadius(i))
+                .outerRadius((d, i) => getOuterRadius(i))
+                .startAngle(0)
+                .endAngle((d, i) => d);
+
+            // Create the div for each svg
+            const div = d3.select("#graph")
+                .selectAll("div")
+                .data(data) // bind data to divs     
+                .enter()
+                .append("div")
+
+            // Create the tooltip div
+            const tooltip = d3.select('body').append('div')
+                .attr('class', 'tooltip')
+
+            // create svg
+            const svg = div
+                .selectAll("svg")
+                .data((d, i) => [d])
+                .enter()
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height)
+
+            // create arcs and animation
+            const arcs = svg
+                .append("g")
+                .attr('class', 'battery-arcs')
+
+            const Price = arcs
+                .append("path")
+                .style('fill', 'rgba(245,0,72)')
+                .attr('transform', 'translate(' + width / 2 + ',' + height / 2 + ')')
+
+            Price.transition()
+                .duration(1000)
+                .attrTween('d', function(d) {
+                    var interpolate = d3.interpolate(0, priceScale(d.Price));
+                    return t => arcGen(interpolate(t), 0);
+                });
+
+            const TopSpeed = arcs
+                .append("path")
+                .style('fill', 'rgba(163,255,10)')
+                .attr('transform', 'translate(' + width / 2 + ',' + height / 2 + ')')
+
+            TopSpeed.transition()
+                .duration(1000)
+                .attrTween('d', function(d) {
+                    var interpolate = d3.interpolate(0, topspeedScale(d.TopSpeed));
+                    return t => arcGen(interpolate(t), 1);
+                });
+
+            const Acceleration = arcs
+                .append("path")
+                .style('fill', 'rgba(32,255,246)')
+                .attr('transform', 'translate(' + width / 2 + ',' + height / 2 + ')')
+
+            Acceleration.transition()
+                .duration(1000)
+                .attrTween('d', function(d) {
+                    var interpolate = d3.interpolate(0, accelerationScale(d.Acceleration));
+                    return t => arcGen(interpolate(t), 2);
+                });
+
+            const Range = arcs
+                .append("path")
+                .style('fill', 'rgb(23,70,185)')
+                .attr('transform', 'translate(' + width / 2 + ',' + height / 2 + ')')
+
+            Range.transition()
+                .duration(1000)
+                .attrTween('d', function(d) {
+                    var interpolate = d3.interpolate(0, rangeScale(d.Range));
+                    return t => arcGen(interpolate(t), 3);
+                });
+
+            // create Tooltip Listeners
+            div.on('mousemove', showTooltip)
+            div.on('mouseout', hideTooltip)
+
+            function showTooltip(d) {
+                const info = d.target.__data__
+                const x = getX(d.pageX)
+                const y = getY(d.pageY)
+                tooltip
+                    .style('display', 'inline-block')
+                    .style('left', x + 'px')
+                    .style('top', y + 'px')
+                    .html(`
+                <h4>${info.Name}</h4>
+                <div class="car-info"><div class="cube" style="background-color:rgba(245,0,72)"></div><p>Price: €${numberWithCommas(info.Price)}</p></div>
+                <div class="car-info"><div class="cube" style="background-color:rgba(163,255,10)"></div><p>Top Speed: ${info.TopSpeed} KM/H</p></div>
+                <div class="car-info"><div class="cube" style="background-color:rgba(32,255,246)"></div><p>Acceleration: ${info.Acceleration} SEC</p></div>
+                <div class="car-info"><div class="cube" style="background-color:rgba(23,70,185)"></div><p>Range: ${info.Range} KM</p></div>
+            `)
+            }
+
+            function getY(y) {
+                if (y > window.innerHeight - 250) {
+                    return y - 180
+                } else {
+                    return y + 10
+                }
+            }
+
+            function getX(x) {
+                if (window.innerWidth > 960) {
+                    return x < window.innerWidth - 300 ? x : x - 250
+                } else if (960 >= window.innerWidth > 600) {
+                    return x < window.innerWidth - 200 ? x : x - 150
+                } else {
+                    return x < window.innerWidth - 200 ? x + 10 : x - 220
+                }
+            }
+
+            function hideTooltip() {
+                tooltip.style('display', 'none');
+            }
+
+            function getInnerRadius(index) {
+                return arcMinRadius + (numArcs - (index + 1)) * (arcWidth + arcPadding);
+            }
+
+            function getOuterRadius(index) {
+                return getInnerRadius(index) + arcWidth;
+            }
+
+            function numberWithCommas(x) {
+                return x.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+            }
+        }
+
+        handleData(Acceleration);
+        document.getElementById("buttons").addEventListener("click", function(e) {
+            if (e.target.nodeName == "BUTTON") {
+                handleData(e.target.id);
+            }
+        });
+    </script>
+</body>
+
+</html>
